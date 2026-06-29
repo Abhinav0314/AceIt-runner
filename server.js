@@ -131,7 +131,7 @@ if __name__ == '__main__':
             return res.status(400).json({ error: `Language ${language} is not supported on this runner.` });
         }
 
-        const child = exec(runCommand, { timeout: 3000 }, (error, stdout, stderr) => {
+        const child = exec(runCommand, { timeout: 10000 }, (error, stdout, stderr) => {
             // Cleanup
             try {
                 if (language === 'java') {
@@ -174,8 +174,8 @@ if __name__ == '__main__':
 
         if (input) {
             child.stdin.write(input);
-            child.stdin.end();
         }
+        child.stdin.end();
 
     } catch (err) {
         return res.status(500).json({ error: 'Server error during execution: ' + err.message });
