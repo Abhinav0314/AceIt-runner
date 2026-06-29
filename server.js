@@ -19,9 +19,18 @@ const execPromise = util.promisify(exec);
 
 const RUNNER_SECRET = process.env.RUNNER_SECRET || null;
 
+// Comma-separated list of allowed backend IPs e.g. "192.168.1.10,10.0.0.5"
+// If not set: only loopback (127.0.0.1, ::1) is allowed
+const ALLOWED_IPS = process.env.ALLOWED_IPS
+    ? process.env.ALLOWED_IPS.split(',').map(ip => ip.trim())
+    : [];
+
 const app = express();
 
-app.use(cors());
+// Disable the X-Powered-By header (don't leak server info)
+app.disable('x-powered-by');
+
+app.use(cors({ origin: false })); // Block all browser CORS — only server-to-server
 app.use(express.json({ limit: '1mb' }));
 app.use(morgan('dev'));
 
@@ -29,6 +38,22 @@ const TEMP_DIR = path.join(os.tmpdir(), 'aceit-runner-temp');
 if (!fs.existsSync(TEMP_DIR)) {
     fs.mkdirSync(TEMP_DIR, { recursive: true });
 }
+
+// ─── IP Whitelist Middleware ───────────────────────────────────────────────
+// Only allow requests from localhost OR explicitly whitelisted IPs
+const ipWhitelist = (req, res, next) => {
+    const raw = req.ip || req.socket.remoteAddress || '';
+    // Normalize IPv6-mapped IPv4 addresses (e.g. ::ffff:127.0.0.1 → 127.0.0.1)
+    const clientIp = raw.replace(/^::ffff:/, '');
+    const isLoopback = clientIp === '127.0.0.1' || clientIp === '::1';
+    const isAllowed = ALLOWED_IPS.includes(clientIp);
+    if (!isLoopback && !isAllowed) {
+        console.warn(`[BLOCKED] Unauthorized IP attempted access: ${clientIp}`);
+        return res.status(403).json({ error: 'Forbidden: your IP is not allowed.' });
+    }
+    next();
+};
+// ──────────────────────────────────────────────────────────────────────────
 
 // ─── Secret Auth Middleware ────────────────────────────────────────────────
 const requireSecret = (req, res, next) => {
@@ -40,6 +65,9 @@ const requireSecret = (req, res, next) => {
     next();
 };
 // ──────────────────────────────────────────────────────────────────────────
+
+// Apply IP whitelist globally to ALL routes
+app.use(ipWhitelist);
 
 app.get('/', (req, res) => {
     res.send('AceIt Execution Runner is active.');
@@ -172,6 +200,12 @@ if __name__ == '__main__':
 });
 
 const PORT = process.env.PORT || 6060;
-app.listen(PORT, () => {
-    console.log(`🚀 Runner Server is listening on port ${PORT}`);
+// Bind to 127.0.0.1 by default so the runner is ONLY reachable from localhost.
+// If aceit-api is on a different server, set HOST=0.0.0.0 and add that server's
+// IP to ALLOWED_IPS in .env.
+const HOST = process.env.HOST || '127.0.0.1';
+app.listen(PORT, HOST, () => {
+    console.log(`🚀 Runner listening on ${HOST}:${PORT}`);
+    console.log(`🔒 IP whitelist: ${ALLOWED_IPS.length ? ALLOWED_IPS.join(', ') : 'loopback only'}`);
+    console.log(`🔑 Secret auth: ${RUNNER_SECRET ? 'enabled' : 'DISABLED (dev mode)'}`);
 });
