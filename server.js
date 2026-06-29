@@ -18,19 +18,27 @@ try {
 const execPromise = util.promisify(exec);
 
 const RUNNER_SECRET = process.env.RUNNER_SECRET || null;
-
-// Comma-separated list of allowed backend IPs e.g. "192.168.1.10,10.0.0.5"
-// If not set: only loopback (127.0.0.1, ::1) is allowed
-const ALLOWED_IPS = process.env.ALLOWED_IPS
-    ? process.env.ALLOWED_IPS.split(',').map(ip => ip.trim())
-    : [];
+// e.g. https://aceit-api.vercel.app  — the exact origin of your backend
+const BACKEND_URL = process.env.BACKEND_URL || null;
 
 const app = express();
 
-// Disable the X-Powered-By header (don't leak server info)
+// Don't leak server info
 app.disable('x-powered-by');
 
-app.use(cors({ origin: false })); // Block all browser CORS — only server-to-server
+// CORS: only allow the backend origin. Blocks any browser tab or unknown server.
+app.use(cors({
+    origin: (origin, cb) => {
+        // No origin = direct server-to-server call (Node fetch) — allow it
+        if (!origin) return cb(null, true);
+        if (!BACKEND_URL) return cb(null, true); // dev mode, no restriction
+        if (origin === BACKEND_URL) return cb(null, true);
+        console.warn(`[CORS BLOCKED] Origin: ${origin}`);
+        return cb(new Error(`CORS: origin ${origin} not allowed`));
+    },
+    methods: ['POST', 'GET'],
+    allowedHeaders: ['Content-Type', 'x-runner-secret'],
+}));
 app.use(express.json({ limit: '1mb' }));
 app.use(morgan('dev'));
 
@@ -39,35 +47,17 @@ if (!fs.existsSync(TEMP_DIR)) {
     fs.mkdirSync(TEMP_DIR, { recursive: true });
 }
 
-// ─── IP Whitelist Middleware ───────────────────────────────────────────────
-// Only allow requests from localhost OR explicitly whitelisted IPs
-const ipWhitelist = (req, res, next) => {
-    const raw = req.ip || req.socket.remoteAddress || '';
-    // Normalize IPv6-mapped IPv4 addresses (e.g. ::ffff:127.0.0.1 → 127.0.0.1)
-    const clientIp = raw.replace(/^::ffff:/, '');
-    const isLoopback = clientIp === '127.0.0.1' || clientIp === '::1';
-    const isAllowed = ALLOWED_IPS.includes(clientIp);
-    if (!isLoopback && !isAllowed) {
-        console.warn(`[BLOCKED] Unauthorized IP attempted access: ${clientIp}`);
-        return res.status(403).json({ error: 'Forbidden: your IP is not allowed.' });
-    }
-    next();
-};
-// ──────────────────────────────────────────────────────────────────────────
-
-// ─── Secret Auth Middleware ────────────────────────────────────────────────
+// Auth: every request must carry the correct RUNNER_SECRET header.
+// This is the sole security layer since the backend (Vercel) has dynamic IPs.
 const requireSecret = (req, res, next) => {
-    if (!RUNNER_SECRET) return next(); // No secret set = dev mode (open)
+    if (!RUNNER_SECRET) return next(); // dev mode — no secret set
     const provided = req.headers['x-runner-secret'];
     if (!provided || provided !== RUNNER_SECRET) {
-        return res.status(401).json({ error: 'Unauthorized: invalid runner secret.' });
+        console.warn(`[BLOCKED] Bad or missing runner secret from ${req.ip}`);
+        return res.status(401).json({ error: 'Unauthorized.' });
     }
     next();
 };
-// ──────────────────────────────────────────────────────────────────────────
-
-// Apply IP whitelist globally to ALL routes
-app.use(ipWhitelist);
 
 app.get('/', (req, res) => {
     res.send('AceIt Execution Runner is active.');
