@@ -205,7 +205,7 @@ const PORT = process.env.PORT || 6060;
 // IP to ALLOWED_IPS in .env.
 const HOST = process.env.HOST || '127.0.0.1';
 app.listen(PORT, HOST, () => {
-    console.log(`🚀 Runner listening on ${HOST}:${PORT}`);
-    console.log(`🔒 IP whitelist: ${ALLOWED_IPS.length ? ALLOWED_IPS.join(', ') : 'loopback only'}`);
-    console.log(`🔑 Secret auth: ${RUNNER_SECRET ? 'enabled' : 'DISABLED (dev mode)'}`);
+    console.log(`Runner listening on ${HOST}:${PORT}`);
+    console.log(`IP whitelist: ${ALLOWED_IPS.length ? ALLOWED_IPS.join(', ') : 'loopback only'}`);
+    console.log(`Secret auth: ${RUNNER_SECRET ? 'enabled' : 'DISABLED (dev mode)'}`);
 });
