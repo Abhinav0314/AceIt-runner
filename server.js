@@ -47,14 +47,12 @@ if (!fs.existsSync(TEMP_DIR)) {
     fs.mkdirSync(TEMP_DIR, { recursive: true });
 }
 
-// Auth: every request must carry the correct RUNNER_SECRET header.
-// This is the sole security layer since the backend (Vercel) has dynamic IPs.
 const requireSecret = (req, res, next) => {
-    if (!RUNNER_SECRET) return next(); // dev mode — no secret set
+    if (!RUNNER_SECRET) return next();
     const provided = req.headers['x-runner-secret'];
     if (!provided || provided !== RUNNER_SECRET) {
         console.warn(`[BLOCKED] Bad or missing runner secret from ${req.ip}`);
-        return res.status(401).json({ error: 'Unauthorized.' });
+        return res.status(401).end(); // no body — reveal nothing
     }
     next();
 };
