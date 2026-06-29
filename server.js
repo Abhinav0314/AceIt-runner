@@ -164,7 +164,7 @@ if __name__ == '__main__':
             // Also check if stderr has content even without an error code (some languages warn)
             if (stderr && stderr.trim().length > 0) {
                  let cleanError = stderr;
-                 const pathRegex = new RegExp(`[a-zA-Z0-9_/\\\\]+${uniqueId}\\.(js|py|cpp|java)`, 'g');
+                 const pathRegex = new RegExp(`[^\\s]*${uniqueId}\\.(js|py|cpp|java)`, 'g');
                  cleanError = cleanError.replace(pathRegex, 'solution');
                  return res.json({ success: false, error: cleanError, isGlobalError: true });
             }
