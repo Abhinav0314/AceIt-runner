@@ -59,16 +59,11 @@ const requireSecret = (req, res, next) => {
     next();
 };
 
-app.get('/', (req, res) => {
-    res.send('AceIt Execution Runner is active.');
-});
 
-app.get('/health', (req, res) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
+// Apply secret auth to every single route globally
+app.use(requireSecret);
 
-
-app.post('/execute', requireSecret, async (req, res) => {
+app.post('/execute', async (req, res) => {
     const { code, language, input } = req.body;
     
     if (!code || !language) {
@@ -189,13 +184,16 @@ if __name__ == '__main__':
     }
 });
 
+// Catch-all — return nothing useful for unknown routes
+app.use((req, res) => {
+    res.status(404).end();
+});
+
 const PORT = process.env.PORT || 6060;
-// Bind to 127.0.0.1 by default so the runner is ONLY reachable from localhost.
-// If aceit-api is on a different server, set HOST=0.0.0.0 and add that server's
-// IP to ALLOWED_IPS in .env.
-const HOST = process.env.HOST || '127.0.0.1';
+const HOST = process.env.HOST || '0.0.0.0';
 app.listen(PORT, HOST, () => {
     console.log(`Runner listening on ${HOST}:${PORT}`);
-    console.log(`IP whitelist: ${ALLOWED_IPS.length ? ALLOWED_IPS.join(', ') : 'loopback only'}`);
+    console.log(`CORS origin: ${BACKEND_URL || 'any (dev mode)'}`);
     console.log(`Secret auth: ${RUNNER_SECRET ? 'enabled' : 'DISABLED (dev mode)'}`);
 });
+
